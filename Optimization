@@ -1,0 +1,77 @@
+def m_feasible(price_points, available_slots, emptiness_threshold):
+    tmp = 0
+    for p in price_points:
+#         tmp = tmp + int(model.predict(np.asarray([[p[0],p[1]]]))[0])
+        tmp = tmp + mp[p[0],p[1],p[2]]
+
+    if tmp <= available_slots and total_slots * emptiness_threshold <= (available_slots - tmp):
+        return True
+    return False
+
+
+def m_revenue(price_points):
+    rev = 0
+    slots = []
+    for p in price_points:        
+        s_filled = mp[p[0],p[1],p[2]]
+        slots.append(s_filled)
+        rev = rev + (s_filled * p[0])
+        
+    return rev,slots
+    
+    
+    
+def optimise(df, journey_id):
+
+    df_tmp = df[(df.journey_id == journey_id) & (df.day > (days - optimisation_day_bfr_jouney))].reset_index(drop = True)
+
+    slots_filled = df[ (df.journey_id == journey_id) & (df.day < (days - optimisation_day_bfr_jouney)) ].slots.sum()
+
+    available_slots = (total_slots - slots_filled)
+    
+    day_cls_to_journey = list(range(days - optimisation_day_bfr_jouney+1, days+1))
+    weekday_lst_10 = list(df_tmp["weekday"])
+    
+    # random search
+    times = 50000
+    ans = 0
+    solution = []
+    for j in range(times):
+        price_points = []
+        prev_price = min_price
+        for x,y in zip(day_cls_to_journey,weekday_lst_10):
+            cur_price = random.randint(prev_price+500,int((prev_price+500) * 1.20))
+            if cur_price > max_price:
+                break
+            prev_price = cur_price
+            price_points.append((cur_price,x,y))
+            
+        if m_feasible(price_points, available_slots, emptiness_threshold):
+            if m_revenue(price_points)[0] > ans:
+                ans, slots = m_revenue(price_points)
+                solution = [p[0] for p in price_points]
+                
+#     df_tmp = df[df.journey_id == 1].loc[days - optimisation_day_bfr_jouney: ].reset_index(drop = True)
+    df_tmp['proposed_price'] = solution
+    df_tmp['forecasted_slots'] = slots
+    
+    orig = np.sum(df_tmp['price'] * df_tmp['slots'])
+    proposed = np.sum(df_tmp['proposed_price'] * df_tmp['forecasted_slots'])
+    revenue_gain = round(proposed-orig, 2)
+    revenue_gain_pct = round((proposed-orig)/orig * 100.0, 2)
+    
+    slots_extra_gain = round(df_tmp['forecasted_slots'].sum() - df_tmp.slots.sum() , 0)
+    slots_extra_gain_pct = round( slots_extra_gain/df_tmp.slots.sum() *100, 2)
+    
+#     display(df_tmp)
+    
+    print(f"""Previous Revenue: {orig}\nNew Revenue: {proposed}\nRevenue gain: {revenue_gain}\nRevenue gain %: {revenue_gain_pct}
+Available slots: {available_slots}\nPreviously filled: {df_tmp.slots.sum()}
+Filled after dynamic Pricing: {df_tmp['forecasted_slots'].sum()}\nSlots gain: {slots_extra_gain}\nSlots gain %: {slots_extra_gain_pct}""")
+    
+    return df_tmp
+
+journey_id = 21
+output = optimise(df, journey_id)
+
+output
